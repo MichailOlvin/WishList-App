@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Wishlist</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0f;
+      --bg2: #111115;
+      --bg3: #13131a;
+      --border: #1e1e24;
+      --border2: #2a2a32;
+      --text: #e8e4dc;
+      --text2: #aaa;
+      --text3: #555;
+      --text4: #333;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      padding: 20px 20px 0;
+      position: sticky; top: 0;
+      background: var(--bg);
+      z-index: 10;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-top { display: flex; align-items: flex-start; justify-content: space-between; }
+    .title-label { font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text3); margin-bottom: 4px; }
+    .title-main { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+    .stats { display: flex; gap: 16px; margin-top: 10px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); }
+    .stats b { color: var(--text2); font-weight: 400; }
+
+    /* ── CONTROLS ── */
+    .controls {
+      padding: 10px 20px;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      border-bottom: 1px solid var(--border);
+    }
+    .controls::-webkit-scrollbar { display: none; }
+    .cat-btn {
+      background: none; border: 1px solid var(--border); border-radius: 20px;
+      padding: 5px 13px; font-size: 11px; font-family: 'Syne', sans-serif;
+      font-weight: 600; color: var(--text3); cursor: pointer; white-space: nowrap;
+      letter-spacing: 0.05em; transition: all 0.15s; flex-shrink: 0;
+    }
+    .cat-btn.active { border-color: var(--text); color: var(--text); background: #1a1a1e; }
+    .sort-wrap { margin-left: auto; flex-shrink: 0; position: relative; }
+    .sort-select {
+      background: none; border: 1px solid var(--border); border-radius: 20px;
+      padding: 5px 26px 5px 13px; font-size: 11px; font-family: 'Syne', sans-serif;
+      font-weight: 600; color: var(--text3); cursor: pointer; outline: none;
+      appearance: none; -webkit-appearance: none;
+    }
+    .sort-wrap::after {
+      content: ''; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      border: 4px solid transparent; border-top-color: var(--text3); margin-top: 2px;
+      pointer-events: none;
+    }
+    .sort-select option { background: #1a1a1e; color: var(--text); }
+
+    /* ── LIST ── */
+    .list {
+      padding: 12px 20px 100px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .empty {
+      text-align: center; padding: 60px 20px;
+      color: var(--text4); font-size: 13px; font-weight: 600; letter-spacing: 0.05em;
+    }
+    .empty-icon { font-size: 36px; display: block; margin-bottom: 12px; }
+
+    /* ── ITEM ── */
+    .item {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px; display: flex;
+      gap: 12px; align-items: flex-start;
+      position: relative; overflow: hidden;
+      transition: border-color 0.2s, opacity 0.2s;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    .item::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px; border-radius: 3px 0 0 3px;
+    }
+    .item.bought { opacity: 0.35; }
+
+    .check {
+      width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--border2);
+      flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; margin-top: 1px;
+    }
+    .check.checked { border-color: transparent; }
+    .check svg { display: none; }
+    .check.checked svg { display: block; }
+
+    .info { flex: 1; min-width: 0; }
+    .item-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; line-height: 1.3; }
+    .item.bought .item-name { text-decoration: line-through; color: var(--text3); }
+    .item-note { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: 'DM Mono', monospace; font-weight: 300; }
+    .item-bottom { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .cat-tag {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+      padding: 2px 8px; border-radius: 10px; text-transform: uppercase;
+    }
+    .item-price { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text2); margin-left: auto; }
+    .priority-tag { font-size: 12px; }
+
+    .actions { display: flex; gap: 2px; }
+    .icon-btn {
+      background: none; border: none; cursor: pointer; padding: 5px;
+      color: var(--text4); border-radius: 6px; transition: color 0.15s, background 0.15s;
+      display: flex; align-items: center;
+    }
+    .icon-btn:active { color: var(--text2); background: var(--border); }
+
+    /* ── FAB ── */
+    .fab {
+      position: fixed; bottom: 24px; right: 20px;
+      width: 52px; height: 52px; border-radius: 16px;
+      background: var(--text); color: var(--bg);
+      border: none; font-size: 26px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      transition: transform 0.2s;
+      font-family: 'Syne', sans-serif; font-weight: 700;
+      z-index: 50;
+    }
+    .fab:active { transform: scale(0.93); }
+
+    /* ── MODAL ── */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px); z-index: 100;
+      display: flex; align-items: flex-end; justify-content: center;
+      animation: fadeO 0.2s ease;
+    }
+    @keyframes fadeO { from { opacity: 0; } to { opacity: 1; } }
+    .modal {
+      background: var(--bg3); border: 1px solid #222;
+      border-radius: 20px 20px 0 0; padding: 24px 20px 40px;
+      width: 100%; max-width: 520px;
+      animation: slideUp 0.25s cubic-bezier(0.34,1.15,0.64,1);
+      max-height: 90vh; overflow-y: auto;
+    }
+    @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .modal-title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 18px; }
+
+    .field { margin-bottom: 13px; }
+    .field label { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-bottom: 5px; }
+    .field input, .field textarea {
+      width: 100%; background: var(--bg); border: 1px solid #222; border-radius: 10px;
+      padding: 10px 13px; font-size: 14px; font-family: 'Syne', sans-serif;
+      font-weight: 600; color: var(--text); outline: none; transition: border-color 0.15s;
+    }
+    .field input:focus, .field textarea:focus { border-color: #444; }
+    .field textarea { resize: none; height: 60px; font-weight: 400; font-family: 'DM Mono', monospace; font-size: 12px; }
+
+    .cat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+    .cat-opt {
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 10px; padding: 7px 3px; text-align: center;
+      font-size: 10px; font-weight: 700; font-family: 'Syne', sans-serif;
+      cursor: pointer; color: var(--text3); transition: all 0.15s; letter-spacing: 0.02em;
+    }
+
+    .pri-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .pri-opt {
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 10px; padding: 8px 3px; text-align: center;
+      font-size: 12px; font-family: 'Syne', sans-serif; font-weight: 600;
+      cursor: pointer; color: var(--text3); transition: all 0.15s;
+    }
+    .pri-opt.selected { border-color: #888; color: var(--text); background: #1a1a1e; }
+
+    .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+    .btn-cancel {
+      flex: 1; background: none; border: 1px solid #222; border-radius: 12px;
+      padding: 12px; font-size: 13px; font-weight: 700; font-family: 'Syne', sans-serif;
+      color: var(--text3); cursor: pointer; transition: all 0.15s;
+    }
+    .btn-save {
+      flex: 2; background: var(--text); border: none; border-radius: 12px;
+      padding: 12px; font-size: 13px; font-weight: 800; font-family: 'Syne', sans-serif;
+      color: var(--bg); cursor: pointer; transition: all 0.15s; letter-spacing: 0.02em;
+    }
+    .btn-save:disabled { opacity: 0.3; cursor: default; }
+
+    /* loading */
+    .loading { display: flex; align-items: center; justify-content: center; height: 60vh; }
+    .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--text3); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
+
+const STORAGE_KEY = 'wl_items_v2';
+
+const CATEGORIES = ['Техника','Одежда','Игры','Барное','Разное'];
+const CAT_COLORS = {
+  'Техника':  { bg:'#1a2a3a', accent:'#4a9eff' },
+  'Одежда':   { bg:'#2a1a2a', accent:'#c47aff' },
+  'Игры':     { bg:'#1a2a1a', accent:'#4aff9e' },
+  'Барное':   { bg:'#2a1a1a', accent:'#ff7a4a' },
+  'Разное':   { bg:'#2a2a1a', accent:'#ffd44a' },
+};
+const PRIORITIES = [
+  { key:'hot',   label:'🔥 Хочу', },
+  { key:'mid',   label:'👍 Надо',  },
+  { key:'low',   label:'💤 Когда-нибудь', },
+];
+
+let items = [];
+let filter = 'Все';
+let sort   = 'added';
+let showForm = false;
+let editId = null;
+let form = { name:'', price:'', category:'Техника', note:'', priority:'mid' };
+let loading = true;
+
+function fmt(v) {
+  const n = parseFloat(v);
+  if (isNaN(n) || n === 0) return '';
+  return '€' + n.toLocaleString('lt-LT', { minimumFractionDigits:0, maximumFractionDigits:2 });
+}
+
+// ── Storage helpers ──
+function loadItems() {
+  return new Promise(resolve => {
+    if (tg?.CloudStorage) {
+      tg.CloudStorage.getItem(STORAGE_KEY, (err, val) => {
+        if (!err && val) { try { resolve(JSON.parse(val)); return; } catch {} }
+        resolve([]);
+      });
+    } else {
+      try { const v = localStorage.getItem(STORAGE_KEY); resolve(v ? JSON.parse(v) : []); }
+      catch { resolve([]); }
+    }
+  });
+}
+function saveItems(data) {
+  const s = JSON.stringify(data);
+  if (tg?.CloudStorage) tg.CloudStorage.setItem(STORAGE_KEY, s);
+  else { try { localStorage.setItem(STORAGE_KEY, s); } catch {} }
+}
+
+// ── Render ──
+function render() {
+  const app = document.getElementById('app');
+
+  if (loading) {
+    app.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+    return;
+  }
+
+  const allCats = ['Все', ...CATEGORIES];
+  const visible = items
+    .filter(i => filter === 'Все' || i.category === filter)
+    .sort((a,b) => {
+      if (sort === 'price_asc')  return (parseFloat(a.price)||0) - (parseFloat(b.price)||0);
+      if (sort === 'price_desc') return (parseFloat(b.price)||0) - (parseFloat(a.price)||0);
+      if (sort === 'priority') {
+        const order = {hot:0, mid:1, low:2};
+        return (order[a.priority]??1) - (order[b.priority]??1);
+      }
+      return b.id - a.id;
+    });
+
+  const total = visible.reduce((s,i) => s + (parseFloat(i.price)||0), 0);
+  const boughtN = visible.filter(i=>i.bought).length;
+
+  const itemsHTML = visible.length === 0
+    ? `<div class="empty"><span class="empty-icon">🛒</span>${items.length===0?'Список пуст — добавь первое желание':'Нет позиций в этой категории'}</div>`
+    : visible.map(item => {
+        const c = CAT_COLORS[item.category] || CAT_COLORS['Разное'];
+        const pri = PRIORITIES.find(p=>p.key===item.priority);
+        return `
+        <div class="item${item.bought?' bought':''}" data-id="${item.id}"
+          style="--ac:${c.accent};">
+          <style>.item[data-id="${item.id}"]::before{background:${c.accent}}</style>
+          <div class="check${item.bought?' checked':''}" data-action="toggle" data-id="${item.id}"
+            style="${item.bought?`background:${c.accent};`:''}">
+            <svg width="11" height="9" fill="none"><path d="M1 4.5l3 3 6-6" stroke="#0d0d0f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="info">
+            <div class="item-name">${esc(item.name)}</div>
+            ${item.note ? `<div class="item-note">${esc(item.note)}</div>` : ''}
+            <div class="item-bottom">
+              <span class="cat-tag" style="background:${c.bg};color:${c.accent}">${item.category}</span>
+              ${pri ? `<span class="priority-tag">${pri.label.split(' ')[0]}</span>` : ''}
+              ${item.price ? `<span class="item-price">${fmt(item.price)}</span>` : ''}
+            </div>
+          </div>
+          <div class="actions">
+            <button class="icon-btn" data-action="edit" data-id="${item.id}" title="Редактировать">
+              <svg width="14" height="14" fill="none"><path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn" data-action="delete" data-id="${item.id}" title="Удалить">
+              <svg width="14" height="14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+
+  const modalHTML = showForm ? `
+    <div class="overlay" id="overlay">
+      <div class="modal">
+        <div class="modal-title">${editId !== null ? 'Редактировать' : 'Добавить желание'}</div>
+        <div class="field">
+          <label>Название</label>
+          <input id="f-name" type="text" value="${esc(form.name)}" placeholder="Что хочешь купить?" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label>Примерная цена (€)</label>
+          <input id="f-price" type="number" value="${form.price}" placeholder="0" min="0"/>
+        </div>
+        <div class="field">
+          <label>Категория</label>
+          <div class="cat-grid">
+            ${CATEGORIES.map(c=>`
+              <div class="cat-opt${form.category===c?' selected':''}" data-cat="${c}"
+                style="${form.category===c?`border-color:${CAT_COLORS[c].accent};color:${CAT_COLORS[c].accent};background:${CAT_COLORS[c].bg}`:''}">
+                ${c}
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="field">
+          <label>Приоритет</label>
+          <div class="pri-grid">
+            ${PRIORITIES.map(p=>`
+              <div class="pri-opt${form.priority===p.key?' selected':''}" data-pri="${p.key}">${p.label}</div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="field">
+          <label>Заметка (необязательно)</label>
+          <textarea id="f-note" placeholder="Ссылка, модель, размер...">${esc(form.note)}</textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="btn-cancel">Отмена</button>
+          <button class="btn-save" id="btn-save"${!form.name.trim()?' disabled':''}>${editId!==null?'Сохранить':'Добавить'}</button>
+        </div>
+      </div>
+    </div>` : '';
+
+  app.innerHTML = `
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <div class="title-label">Wishlist</div>
+          <div class="title-main">Хочу купить</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div><b>${items.length}</b> позиций</div>
+        ${total>0?`<div><b>${fmt(total)}</b> примерно</div>`:''}
+        ${boughtN>0?`<div><b>${boughtN}</b> куплено</div>`:''}
+      </div>
+    </div>
+    <div class="controls">
+      ${allCats.map(c=>`<button class="cat-btn${filter===c?' active':''}" data-filter="${c}">${c}</button>`).join('')}
+      <div class="sort-wrap">
+        <select class="sort-select" id="sort-sel">
+          <option value="added"${sort==='added'?' selected':''}>По дате</option>
+          <option value="priority"${sort==='priority'?' selected':''}>По приоритету</option>
+          <option value="price_asc"${sort==='price_asc'?' selected':''}>Дешевле</option>
+          <option value="price_desc"${sort==='price_desc'?' selected':''}>Дороже</option>
+        </select>
+      </div>
+    </div>
+    <div class="list">${itemsHTML}</div>
+    <button class="fab" id="fab">+</button>
+    ${modalHTML}
+  `;
+
+  bindEvents();
+}
+
+function bindEvents() {
+  document.getElementById('fab')?.addEventListener('click', () => {
+    editId = null;
+    form = { name:'', price:'', category:'Техника', note:'', priority:'mid' };
+    showForm = true; render();
+    setTimeout(()=>document.getElementById('f-name')?.focus(), 80);
+  });
+
+  document.getElementById('sort-sel')?.addEventListener('change', e => { sort = e.target.value; render(); });
+
+  document.querySelectorAll('[data-filter]').forEach(el =>
+    el.addEventListener('click', () => { filter = el.dataset.filter; render(); }));
+
+  document.querySelectorAll('[data-action]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = parseInt(el.dataset.id);
+      if (el.dataset.action === 'toggle') { toggleItem(id); }
+      if (el.dataset.action === 'delete') { deleteItem(id); }
+      if (el.dataset.action === 'edit')   { startEdit(id); }
+    });
+  });
+
+  document.querySelectorAll('[data-cat]').forEach(el =>
+    el.addEventListener('click', () => { form.category = el.dataset.cat; render(); }));
+
+  document.querySelectorAll('[data-pri]').forEach(el =>
+    el.addEventListener('click', () => { form.priority = el.dataset.pri; render(); }));
+
+  document.getElementById('f-name')?.addEventListener('input', e => {
+    form.name = e.target.value;
+    document.getElementById('btn-save').disabled = !form.name.trim();
+  });
+  document.getElementById('f-price')?.addEventListener('input', e => form.price = e.target.value);
+  document.getElementById('f-note')?.addEventListener('input', e => form.note = e.target.value);
+
+  document.getElementById('btn-cancel')?.addEventListener('click', () => { showForm=false; render(); });
+  document.getElementById('btn-save')?.addEventListener('click', saveItem);
+  document.getElementById('overlay')?.addEventListener('click', e => {
+    if (e.target.id === 'overlay') { showForm=false; render(); }
+  });
+  document.getElementById('f-name')?.addEventListener('keydown', e => { if (e.key==='Enter') saveItem(); });
+}
+
+function saveItem() {
+  if (!form.name.trim()) return;
+  if (editId !== null) {
+    items = items.map(i => i.id===editId ? {...i,...form} : i);
+    editId = null;
+  } else {
+    items = [...items, { ...form, id: Date.now(), bought: false }];
+  }
+  saveItems(items);
+  showForm = false; render();
+}
+function deleteItem(id) { items = items.filter(i=>i.id!==id); saveItems(items); render(); }
+function toggleItem(id) { items = items.map(i=>i.id===id?{...i,bought:!i.bought}:i); saveItems(items); render(); }
+function startEdit(id) {
+  const item = items.find(i=>i.id===id); if(!item) return;
+  form = { name:item.name, price:item.price, category:item.category, note:item.note||'', priority:item.priority||'mid' };
+  editId = id; showForm = true; render();
+  setTimeout(()=>document.getElementById('f-name')?.focus(), 80);
+}
+function esc(s='') { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Init
+loadItems().then(data => {
+  items = data;
+  loading = false;
+  render();
+});
+</script>
+</body>
+</html>
