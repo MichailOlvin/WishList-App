@@ -1,0 +1,8 @@
+WishList/.expo/
+WishList/.expo-shared/
+WishList/node_modules/
+WishList/dist/
+WishList/build/
+WishList/*.log
+WishList/.DS_Store
+.DS_Store
