@@ -37,6 +37,7 @@ const setupDatabase = async (): Promise<void> => {
         name TEXT NOT NULL,
         price REAL,
         url TEXT,
+        imageUrl TEXT,
         priority TEXT NOT NULL,
         categoryId TEXT NOT NULL,
         status TEXT NOT NULL,
@@ -56,6 +57,18 @@ const setupDatabase = async (): Promise<void> => {
       ON wish_items (createdAt);
   `);
 
+  await migrateWishItemsSchema();
   await seedDefaultCategories();
   await ensureGeneralCategory();
+};
+
+const migrateWishItemsSchema = async (): Promise<void> => {
+  const db = await getDatabase();
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(wish_items)');
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has('imageUrl')) {
+    // Migration v1.3.0: optional thumbnail URL для компактной картинки в списке.
+    await db.execAsync('ALTER TABLE wish_items ADD COLUMN imageUrl TEXT');
+  }
 };

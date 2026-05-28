@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { WishItem } from '../../types/models';
-import * as wishService from '../../db/services/wishItems_v1.0.0';
+import * as wishService from '../../db/services/wishService';
 
 interface WishStore {
   items: WishItem[];

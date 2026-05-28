@@ -1,2 +1,2 @@
-// Compatibility wrapper: реальная реализация сервиса живёт в versioned file v1.0.0.
-export * from './wishItems_v1.0.0';
+// Compatibility wrapper: реальная реализация сервиса живёт в актуальном versioned file.
+export * from './wishItems_v1.3.0';

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Linking,
   Pressable,
   StyleSheet,
@@ -10,14 +11,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Appbar, Button, Chip, FAB, IconButton, Menu, Switch } from 'react-native-paper';
+import { Appbar, Button, Chip, Dialog, FAB, IconButton, Menu, Portal, Switch } from 'react-native-paper';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { initDatabase } from '../db/schema';
 import { useCategoryStore } from '../state/stores/categoryStore';
 import { useWishStore } from '../state/stores/wishStore';
 import { Category, Priority, WishItem } from '../types/models';
-import { formatDate, formatPrice } from '../utils/formatters_v1.0.0';
+import { formatDate, formatPrice, priorityLabels, statusLabels } from '../utils/formatters_v1.0.0';
 import { normalizeProductUrl } from '../utils/url_v1.1.0';
 import { colors } from '../theme/theme_v1.0.0';
 
@@ -39,7 +40,7 @@ const sortOptions: Array<{ key: SortKey; label: string }> = [
 ];
 
 // Version берём из Expo config, чтобы UI не расходился с app.json при следующих релизах.
-const appVersion = Constants.expoConfig?.version ?? '1.2.5';
+const appVersion = Constants.expoConfig?.version ?? '1.3.0';
 
 export default function Index() {
   const router = useRouter();
@@ -52,6 +53,8 @@ export default function Index() {
   const [showBought, setShowBought] = useState(false);
   const [isReady, setReady] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [selectedNoteItem, setSelectedNoteItem] = useState<WishItem | null>(null);
+  const [failedImageKeys, setFailedImageKeys] = useState<Set<string>>(() => new Set());
 
   const bootstrapApp = useCallback(async () => {
     try {
@@ -85,10 +88,12 @@ export default function Index() {
   }, [categories]);
 
   const filteredAndSortedItems = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = normalizeSearchText(search);
 
     const filteredItems = items.filter((item) => {
-      const matchesSearch = item.name.toLowerCase().includes(normalizedSearch);
+      const categoryName = categoryById[item.categoryId]?.name ?? 'Без категории';
+      const matchesSearch =
+        normalizedSearch.length === 0 || buildSearchText(item, categoryName).includes(normalizedSearch);
       const matchesCategory = selectedCategoryId === null || item.categoryId === selectedCategoryId;
       const matchesStatus = showBought || item.status === 'want';
 
@@ -113,7 +118,7 @@ export default function Index() {
           return 0;
       }
     });
-  }, [items, search, selectedCategoryId, showBought, sortKey]);
+  }, [categoryById, items, search, selectedCategoryId, showBought, sortKey]);
 
   const selectedSortLabel = sortOptions.find((option) => option.key === sortKey)?.label ?? 'Сортировка';
 
@@ -139,8 +144,13 @@ export default function Index() {
     const categoryName = categoryById[item.categoryId]?.name ?? 'Без категории';
     const isBought = item.status === 'bought';
     const productUrl = normalizeProductUrl(item.url);
+    const thumbnailUrl = normalizeProductUrl(item.imageUrl);
     const metaText = `${categoryName} • ${formatPrice(item.price)}`;
     const isDeadlinePast = isPastDeadline(item.deadline);
+    const hasNote = Boolean(item.note?.trim());
+    const thumbnailKey = thumbnailUrl ? `${item.id}:${thumbnailUrl}` : null;
+    const thumbnailSource =
+      thumbnailUrl && thumbnailKey && !failedImageKeys.has(thumbnailKey) ? { uri: thumbnailUrl } : null;
 
     return (
       <Pressable
@@ -152,6 +162,19 @@ export default function Index() {
         ]}
       >
         <View style={[styles.priorityRail, { backgroundColor: priorityColors[item.priority] }]} />
+
+        {thumbnailSource && (
+          <Image
+            source={thumbnailSource}
+            style={styles.thumbnail}
+            onError={() => {
+              // Если ссылка на картинку битая, скрываем превью и оставляем строку компактной.
+              if (thumbnailKey) {
+                setFailedImageKeys((currentKeys) => new Set(currentKeys).add(thumbnailKey));
+              }
+            }}
+          />
+        )}
 
         <View style={styles.itemTextBlock}>
           <Text numberOfLines={1} style={[styles.itemName, isBought && styles.boughtText]}>
@@ -185,6 +208,19 @@ export default function Index() {
         </View>
 
         <View style={styles.actionButtons}>
+          {hasNote && (
+            <IconButton
+              icon="note-text-outline"
+              accessibilityLabel="Показать заметку"
+              iconColor={colors.textMuted}
+              size={20}
+              onPress={(event) => {
+                event.stopPropagation();
+                setSelectedNoteItem(item);
+              }}
+              style={styles.rowButton}
+            />
+          )}
           <IconButton
             icon={isBought ? 'undo-variant' : 'check'}
             accessibilityLabel={isBought ? 'Вернуть в хочу' : 'Отметить купленным'}
@@ -242,7 +278,7 @@ export default function Index() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Поиск по названию"
+          placeholder="Поиск по всему"
           placeholderTextColor={colors.textMuted}
           style={styles.searchInput}
         />
@@ -314,6 +350,24 @@ export default function Index() {
         style={styles.fab}
         color={colors.background}
       />
+
+      <Portal>
+        <Dialog
+          visible={Boolean(selectedNoteItem)}
+          onDismiss={() => setSelectedNoteItem(null)}
+          style={styles.noteDialog}
+        >
+          <Dialog.Title>{selectedNoteItem?.name ?? 'Заметка'}</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.noteDialogText}>{selectedNoteItem?.note}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={colors.accent} onPress={() => setSelectedNoteItem(null)}>
+              Закрыть
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
@@ -344,6 +398,35 @@ const compareNullablePrices = (firstPrice: number | null, secondPrice: number | 
 
   return direction === 'asc' ? firstPrice - secondPrice : secondPrice - firstPrice;
 };
+
+const buildSearchText = (item: WishItem, categoryName: string): string => {
+  const priceTokens =
+    item.price === null
+      ? []
+      : [String(item.price), item.price.toFixed(2), item.price.toFixed(2).replace('.', ','), formatPrice(item.price)];
+
+  // v1.3.0: Единый поиск собирает searchable haystack из всех полей, которые пользователь видит или помнит.
+  return normalizeSearchText(
+    [
+      item.name,
+      categoryName,
+      item.url,
+      item.imageUrl,
+      item.note,
+      item.priority,
+      priorityLabels[item.priority],
+      item.status,
+      statusLabels[item.status],
+      item.deadline,
+      item.deadline ? formatDate(item.deadline) : null,
+      ...priceTokens,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+};
+
+const normalizeSearchText = (value: string): string => value.trim().toLocaleLowerCase('ru-RU');
 
 const openProductUrl = async (url: string): Promise<void> => {
   try {
@@ -490,6 +573,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  noteDialog: {
+    backgroundColor: colors.surface,
+  },
+  noteDialogText: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
   pressedRow: {
     backgroundColor: colors.surfaceMuted,
   },
@@ -537,6 +628,14 @@ const styles = StyleSheet.create({
   },
   totalText: {
     marginBottom: 12,
+  },
+  thumbnail: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 44,
+    width: 44,
   },
   urlButton: {
     alignSelf: 'flex-start',

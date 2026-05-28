@@ -23,6 +23,7 @@ export default function AddEdit() {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [url, setUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
   const [categoryId, setCategoryId] = useState('');
   const [deadline, setDeadline] = useState<string | null>(null);
@@ -57,6 +58,7 @@ export default function AddEdit() {
     setName('');
     setPrice('');
     setUrl('');
+    setImageUrl('');
     setPriority('medium');
     setCategoryId(getDefaultCategoryId(categories));
     setDeadline(null);
@@ -90,6 +92,7 @@ export default function AddEdit() {
       setName(currentItem.name);
       setPrice(currentItem.price === null ? '' : String(currentItem.price));
       setUrl(currentItem.url ?? '');
+      setImageUrl(currentItem.imageUrl ?? '');
       setPriority(currentItem.priority);
       setCategoryId(currentItem.categoryId);
       setDeadline(currentItem.deadline);
@@ -160,6 +163,7 @@ export default function AddEdit() {
       name: trimmedName,
       price: parsedPrice,
       url: url.trim() || null,
+      imageUrl: imageUrl.trim() || null,
       priority,
       categoryId,
       status: currentItem?.status ?? 'want',
@@ -251,6 +255,16 @@ export default function AddEdit() {
           label="URL"
           value={url}
           onChangeText={setUrl}
+          autoCapitalize="none"
+          keyboardType="url"
+          mode="outlined"
+          style={styles.input}
+        />
+
+        <TextInput
+          label="Ссылка на картинку"
+          value={imageUrl}
+          onChangeText={setImageUrl}
           autoCapitalize="none"
           keyboardType="url"
           mode="outlined"

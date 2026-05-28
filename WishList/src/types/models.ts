@@ -7,6 +7,7 @@ export interface WishItem {
   name: string;
   price: number | null;
   url: string | null;
+  imageUrl: string | null;
   priority: Priority;
   categoryId: string;
   status: Status;
