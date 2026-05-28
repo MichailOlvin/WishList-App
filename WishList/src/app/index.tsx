@@ -32,7 +32,7 @@ const priorityColors: Record<Priority, string> = {
 };
 
 // Version берём из Expo config, чтобы UI не расходился с app.json при следующих релизах.
-const appVersion = Constants.expoConfig?.version ?? '1.4.0';
+const appVersion = Constants.expoConfig?.version ?? '1.4.1';
 
 export default function Index() {
   const router = useRouter();

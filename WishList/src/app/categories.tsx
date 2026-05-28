@@ -12,7 +12,7 @@ import { useWishStore } from '../state/stores/wishStore';
 import { AppSortKey, ListDensity } from '../types/settings_v1.4.0';
 import { colors } from '../theme/theme_v1.0.0';
 
-const appVersion = Constants.expoConfig?.version ?? '1.4.0';
+const appVersion = Constants.expoConfig?.version ?? '1.4.1';
 
 export default function Settings() {
   const router = useRouter();
@@ -54,9 +54,10 @@ export default function Settings() {
   }, [categories, settings.defaultCategoryId]);
 
   const defaultCategoryValue = useMemo(() => {
+    const savedCategory = categories.find((category) => category.id === settings.defaultCategoryId);
     const fallbackCategory = categories.find((category) => category.name === GENERAL_CATEGORY_NAME) ?? categories[0];
 
-    return settings.defaultCategoryId ?? fallbackCategory?.id ?? '';
+    return savedCategory?.id ?? fallbackCategory?.id ?? '';
   }, [categories, settings.defaultCategoryId]);
 
   const boughtItemsCount = useMemo(() => {
@@ -197,12 +198,12 @@ export default function Settings() {
           <SettingsRow
             icon="star-outline"
             title="Что нового"
-            value="v1.4.0"
+            value="v1.4.1"
             onPress={() => setWhatsNewVisible(true)}
           />
           <SettingsRow
             icon="database-outline"
-            title="Debug info"
+            title="Информация для отладки"
             description={`${items.length} хотелок • ${categories.length} категорий`}
           />
           <SettingsRow icon="information-outline" title="Версия" value={appVersion} />
@@ -268,8 +269,8 @@ export default function Settings() {
           <Dialog.Title>Что нового</Dialog.Title>
           <Dialog.Content>
             <Text style={styles.dialogText}>
-              v1.4.0: появился полноценный экран настроек, preferences для списка, отдельное управление категориями и
-              быстрые действия для очистки данных.
+              v1.4.1: исправлены мелкие шероховатости настроек. Категория по умолчанию корректно переживает удаление
+              пользовательской категории, а UI-тексты снова полностью на русском.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>

@@ -109,7 +109,7 @@ export default function CategoryManagement() {
       if (itemCount > 0) {
         Alert.alert(
           'Категория используется',
-          `В этой категории есть items: ${itemCount}. Сначала перенесите или удалите их.`,
+          `В этой категории есть хотелки: ${itemCount}. Сначала перенесите или удалите их.`,
         );
         return;
       }
@@ -130,7 +130,7 @@ export default function CategoryManagement() {
       const result = await deleteCategory(categoryToDelete.id);
 
       if (!result.ok && result.reason === 'inUse') {
-        Alert.alert('Категория используется', `В категории есть items: ${result.itemCount}.`);
+        Alert.alert('Категория используется', `В категории есть хотелки: ${result.itemCount}.`);
       }
 
       if (!result.ok && result.reason === 'default') {
