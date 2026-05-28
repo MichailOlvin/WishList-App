@@ -1,179 +1,113 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
-import { Appbar, Button, Dialog, FAB, IconButton, List, Portal, TextInput } from 'react-native-paper';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Appbar, Button, Dialog, Divider, List, Portal, RadioButton, Switch } from 'react-native-paper';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
+import { LIST_DENSITY_OPTIONS, SORT_OPTIONS } from '../constants/appSettings_v1.4.0';
+import { GENERAL_CATEGORY_NAME } from '../constants/defaultCategories_v1.0.0';
 import { initDatabase } from '../db/schema';
 import { useCategoryStore } from '../state/stores/categoryStore';
-import { Category } from '../types/models';
+import { useSettingsStore } from '../state/stores/settingsStore';
+import { useWishStore } from '../state/stores/wishStore';
+import { AppSortKey, ListDensity } from '../types/settings_v1.4.0';
 import { colors } from '../theme/theme_v1.0.0';
 
-export default function Categories() {
-  const router = useRouter();
-  const {
-    categories,
-    addCategory,
-    updateCategory,
-    deleteCategory,
-    getCategoryUsageCount,
-    loadCategories,
-    isLoading,
-  } = useCategoryStore();
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [isAddDialogVisible, setAddDialogVisible] = useState(false);
-  const [categoryToEdit, setCategoryToEdit] = useState<Category | null>(null);
-  const [editedCategoryName, setEditedCategoryName] = useState('');
-  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [isSaving, setSaving] = useState(false);
+const appVersion = Constants.expoConfig?.version ?? '1.4.0';
 
-  const bootstrapCategories = useCallback(async () => {
+export default function Settings() {
+  const router = useRouter();
+  const { categories, loadCategories } = useCategoryStore();
+  const { items, clearAllItems, clearBoughtItems, refreshItems } = useWishStore();
+  const { settings, loadSettings, updateSetting } = useSettingsStore();
+  const [isSortDialogVisible, setSortDialogVisible] = useState(false);
+  const [isCategoryDialogVisible, setCategoryDialogVisible] = useState(false);
+  const [isDensityDialogVisible, setDensityDialogVisible] = useState(false);
+  const [isWhatsNewVisible, setWhatsNewVisible] = useState(false);
+
+  const bootstrapSettings = useCallback(async () => {
     try {
       await initDatabase();
-      await loadCategories();
+      await Promise.all([loadCategories(), loadSettings(), refreshItems()]);
     } catch (error) {
-      console.error('Error loading categories screen', error);
-      Alert.alert('Ошибка', 'Не удалось загрузить категории.');
+      console.error('Error loading settings screen', error);
+      Alert.alert('Ошибка', 'Не удалось загрузить настройки.');
     }
-  }, [loadCategories]);
+  }, [loadCategories, loadSettings, refreshItems]);
 
   useEffect(() => {
-    void bootstrapCategories();
-  }, [bootstrapCategories]);
+    void bootstrapSettings();
+  }, [bootstrapSettings]);
 
-  const handleAddCategory = async () => {
-    const trimmedName = newCategoryName.trim();
+  const selectedSortLabel = useMemo(() => {
+    return SORT_OPTIONS.find((option) => option.key === settings.defaultSortKey)?.label ?? 'Дата ↓';
+  }, [settings.defaultSortKey]);
 
-    if (!trimmedName) {
-      Alert.alert('Введите название', 'Название категории не может быть пустым.');
-      return;
-    }
+  const selectedDensityLabel = useMemo(() => {
+    return LIST_DENSITY_OPTIONS.find((option) => option.key === settings.listDensity)?.label ?? 'Обычно';
+  }, [settings.listDensity]);
 
+  const selectedDefaultCategoryName = useMemo(() => {
+    const savedCategory = categories.find((category) => category.id === settings.defaultCategoryId);
+    const fallbackCategory = categories.find((category) => category.name === GENERAL_CATEGORY_NAME) ?? categories[0];
+
+    return savedCategory?.name ?? fallbackCategory?.name ?? GENERAL_CATEGORY_NAME;
+  }, [categories, settings.defaultCategoryId]);
+
+  const defaultCategoryValue = useMemo(() => {
+    const fallbackCategory = categories.find((category) => category.name === GENERAL_CATEGORY_NAME) ?? categories[0];
+
+    return settings.defaultCategoryId ?? fallbackCategory?.id ?? '';
+  }, [categories, settings.defaultCategoryId]);
+
+  const boughtItemsCount = useMemo(() => {
+    return items.filter((item) => item.status === 'bought').length;
+  }, [items]);
+
+  const handleUpdateSetting = async <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
     try {
-      setSaving(true);
-      await addCategory(trimmedName);
-      setNewCategoryName('');
-      setAddDialogVisible(false);
+      // Settings пишем сразу в SQLite, чтобы поведение списка сохранялось после restart.
+      await updateSetting(key, value);
     } catch (error) {
-      console.error('Error adding category', error);
-      const message = error instanceof Error && error.message === 'CATEGORY_ALREADY_EXISTS'
-        ? 'Такая категория уже существует.'
-        : 'Не удалось добавить категорию.';
-      Alert.alert('Ошибка', message);
-    } finally {
-      setSaving(false);
+      console.error('Error updating setting from settings screen', error);
+      Alert.alert('Ошибка', 'Не удалось сохранить настройку.');
     }
   };
 
-  const requestEditCategory = (category: Category) => {
-    setCategoryToEdit(category);
-    setEditedCategoryName(category.name);
+  const handleClearBought = () => {
+    Alert.alert('Очистить купленные?', 'Все хотелки со статусом "Куплено" будут удалены.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Очистить',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await clearBoughtItems();
+          } catch (error) {
+            console.error('Error clearing bought items', error);
+            Alert.alert('Ошибка', 'Не удалось очистить купленные хотелки.');
+          }
+        },
+      },
+    ]);
   };
 
-  const confirmEditCategory = async () => {
-    if (!categoryToEdit) {
-      return;
-    }
-
-    const trimmedName = editedCategoryName.trim();
-
-    if (!trimmedName) {
-      Alert.alert('Введите название', 'Название категории не может быть пустым.');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await updateCategory(categoryToEdit.id, trimmedName);
-      setCategoryToEdit(null);
-      setEditedCategoryName('');
-    } catch (error) {
-      console.error('Error editing category', error);
-      const message = error instanceof Error && error.message === 'CATEGORY_ALREADY_EXISTS'
-        ? 'Такая категория уже существует.'
-        : 'Не удалось переименовать категорию.';
-      Alert.alert('Ошибка', message);
-    } finally {
-      setSaving(false);
-    }
+  const handleClearAll = () => {
+    Alert.alert('Удалить все хотелки?', 'Категории останутся, но весь список желаний будет очищен.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await clearAllItems();
+          } catch (error) {
+            console.error('Error clearing all items', error);
+            Alert.alert('Ошибка', 'Не удалось удалить все хотелки.');
+          }
+        },
+      },
+    ]);
   };
-
-  const requestDeleteCategory = async (category: Category) => {
-    if (category.isDefault) {
-      Alert.alert('Стандартная категория', 'Эту категорию нельзя удалить.');
-      return;
-    }
-
-    try {
-      const itemCount = await getCategoryUsageCount(category.id);
-
-      if (itemCount > 0) {
-        Alert.alert(
-          'Категория используется',
-          `В этой категории есть items: ${itemCount}. Сначала перенесите или удалите их.`,
-        );
-        return;
-      }
-
-      setCategoryToDelete(category);
-    } catch (error) {
-      console.error('Error checking category usage', error);
-      Alert.alert('Ошибка', 'Не удалось проверить категорию.');
-    }
-  };
-
-  const confirmDeleteCategory = async () => {
-    if (!categoryToDelete) {
-      return;
-    }
-
-    try {
-      const result = await deleteCategory(categoryToDelete.id);
-
-      if (!result.ok && result.reason === 'inUse') {
-        Alert.alert('Категория используется', `В категории есть items: ${result.itemCount}.`);
-      }
-
-      if (!result.ok && result.reason === 'default') {
-        Alert.alert('Стандартная категория', 'Эту категорию нельзя удалить.');
-      }
-    } catch (error) {
-      console.error('Error deleting category', error);
-      Alert.alert('Ошибка', 'Не удалось удалить категорию.');
-    } finally {
-      setCategoryToDelete(null);
-    }
-  };
-
-  const renderCategory = ({ item }: { item: Category }) => (
-    <List.Item
-      title={item.name}
-      description={item.isDefault ? 'Стандартная' : 'Пользовательская'}
-      titleStyle={styles.categoryTitle}
-      descriptionStyle={styles.categoryDescription}
-      style={styles.categoryRow}
-      left={(props) => (
-        <List.Icon
-          {...props}
-          icon={item.isDefault ? 'lock-outline' : 'tag-outline'}
-          color={item.isDefault ? colors.textMuted : colors.accent}
-        />
-      )}
-      right={() => (
-        <View style={styles.categoryActions}>
-          <IconButton
-            icon="pencil-outline"
-            iconColor={colors.accent}
-            onPress={() => requestEditCategory(item)}
-          />
-          <IconButton
-            icon={item.isDefault ? 'lock' : 'delete-outline'}
-            iconColor={item.isDefault ? colors.textMuted : colors.danger}
-            disabled={item.isDefault}
-            onPress={() => requestDeleteCategory(item)}
-          />
-        </View>
-      )}
-    />
-  );
 
   return (
     <View style={styles.container}>
@@ -182,80 +116,165 @@ export default function Categories() {
         <Appbar.Content title="Настройки" />
       </Appbar.Header>
 
-      <FlatList
-        data={categories}
-        keyExtractor={(category) => category.id}
-        renderItem={renderCategory}
-        refreshing={isLoading}
-        onRefresh={bootstrapCategories}
-        ListHeaderComponent={<Text style={styles.sectionTitle}>Категории</Text>}
-        contentContainerStyle={[styles.listContent, categories.length === 0 && styles.emptyList]}
-        ListEmptyComponent={<Text style={styles.emptyText}>Категорий пока нет</Text>}
-      />
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.brandBlock}>
+          <Text style={styles.brandTitle}>WishList</Text>
+          <Text style={styles.brandMeta}>v{appVersion}</Text>
+        </View>
 
-      <FAB
-        icon="plus"
-        onPress={() => setAddDialogVisible(true)}
-        style={styles.fab}
-        color={colors.background}
-      />
+        <SettingsSection title="Список">
+          <SettingsRow
+            icon="check-circle-outline"
+            title="Показывать купленные"
+            description="Значение по умолчанию при открытии списка"
+            right={() => (
+              <Switch
+                value={settings.showBoughtByDefault}
+                onValueChange={(value) => void handleUpdateSetting('showBoughtByDefault', value)}
+                color={colors.accent}
+              />
+            )}
+          />
+          <SettingsRow
+            icon="sort"
+            title="Сортировка по умолчанию"
+            value={selectedSortLabel}
+            onPress={() => setSortDialogVisible(true)}
+          />
+          <SettingsRow
+            icon="tag-outline"
+            title="Категория по умолчанию"
+            value={selectedDefaultCategoryName}
+            onPress={() => setCategoryDialogVisible(true)}
+          />
+          <SettingsRow
+            icon="image-outline"
+            title="Миниатюры в списке"
+            description="Показывать маленькие картинки хотелок"
+            right={() => (
+              <Switch
+                value={settings.thumbnailsEnabled}
+                onValueChange={(value) => void handleUpdateSetting('thumbnailsEnabled', value)}
+                color={colors.accent}
+              />
+            )}
+          />
+          <SettingsRow
+            icon="format-line-spacing"
+            title="Компактность списка"
+            value={selectedDensityLabel}
+            onPress={() => setDensityDialogVisible(true)}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Категории">
+          <SettingsRow
+            icon="shape-outline"
+            title="Управление категориями"
+            description={`${categories.length} категорий`}
+            onPress={() => router.push('/category-management')}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Данные">
+          <SettingsRow
+            icon="broom"
+            title="Очистить купленные"
+            description={`${boughtItemsCount} купленных хотелок`}
+            danger
+            onPress={handleClearBought}
+          />
+          <SettingsRow
+            icon="delete-outline"
+            title="Удалить все хотелки"
+            description="Категории и настройки останутся"
+            danger
+            onPress={handleClearAll}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="О приложении">
+          <SettingsRow
+            icon="star-outline"
+            title="Что нового"
+            value="v1.4.0"
+            onPress={() => setWhatsNewVisible(true)}
+          />
+          <SettingsRow
+            icon="database-outline"
+            title="Debug info"
+            description={`${items.length} хотелок • ${categories.length} категорий`}
+          />
+          <SettingsRow icon="information-outline" title="Версия" value={appVersion} />
+        </SettingsSection>
+      </ScrollView>
 
       <Portal>
-        <Dialog visible={isAddDialogVisible} onDismiss={() => setAddDialogVisible(false)}>
-          <Dialog.Title>Добавить категорию</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Название категории"
-              value={newCategoryName}
-              onChangeText={setNewCategoryName}
-              mode="outlined"
-              autoFocus
-            />
-          </Dialog.Content>
+        <RadioDialog
+          visible={isSortDialogVisible}
+          title="Сортировка по умолчанию"
+          value={settings.defaultSortKey}
+          options={SORT_OPTIONS}
+          onDismiss={() => setSortDialogVisible(false)}
+          onChange={(value) => {
+            void handleUpdateSetting('defaultSortKey', value as AppSortKey);
+            setSortDialogVisible(false);
+          }}
+        />
+
+        <RadioDialog
+          visible={isDensityDialogVisible}
+          title="Компактность списка"
+          value={settings.listDensity}
+          options={LIST_DENSITY_OPTIONS}
+          onDismiss={() => setDensityDialogVisible(false)}
+          onChange={(value) => {
+            void handleUpdateSetting('listDensity', value as ListDensity);
+            setDensityDialogVisible(false);
+          }}
+        />
+
+        <Dialog visible={isCategoryDialogVisible} onDismiss={() => setCategoryDialogVisible(false)}>
+          <Dialog.Title>Категория по умолчанию</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView>
+              <RadioButton.Group
+                value={defaultCategoryValue}
+                onValueChange={(value) => {
+                  void handleUpdateSetting('defaultCategoryId', value || null);
+                  setCategoryDialogVisible(false);
+                }}
+              >
+                {categories.map((category) => (
+                  <RadioButton.Item
+                    key={category.id}
+                    label={category.name}
+                    value={category.id}
+                    labelStyle={styles.radioLabel}
+                    color={colors.accent}
+                  />
+                ))}
+              </RadioButton.Group>
+            </ScrollView>
+          </Dialog.ScrollArea>
           <Dialog.Actions>
-            <Button onPress={() => setAddDialogVisible(false)} textColor={colors.textMuted}>
-              Отмена
-            </Button>
-            <Button loading={isSaving} disabled={isSaving} onPress={handleAddCategory}>
-              Сохранить
+            <Button onPress={() => setCategoryDialogVisible(false)} textColor={colors.textMuted}>
+              Закрыть
             </Button>
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog visible={Boolean(categoryToEdit)} onDismiss={() => setCategoryToEdit(null)}>
-          <Dialog.Title>Переименовать категорию</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Название категории"
-              value={editedCategoryName}
-              onChangeText={setEditedCategoryName}
-              mode="outlined"
-              autoFocus
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setCategoryToEdit(null)} textColor={colors.textMuted}>
-              Отмена
-            </Button>
-            <Button loading={isSaving} disabled={isSaving} onPress={confirmEditCategory}>
-              Сохранить
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-
-        <Dialog visible={Boolean(categoryToDelete)} onDismiss={() => setCategoryToDelete(null)}>
-          <Dialog.Title>Удалить категорию?</Dialog.Title>
+        <Dialog visible={isWhatsNewVisible} onDismiss={() => setWhatsNewVisible(false)}>
+          <Dialog.Title>Что нового</Dialog.Title>
           <Dialog.Content>
             <Text style={styles.dialogText}>
-              Категория "{categoryToDelete?.name}" будет удалена. Это действие нельзя отменить.
+              v1.4.0: появился полноценный экран настроек, preferences для списка, отдельное управление категориями и
+              быстрые действия для очистки данных.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setCategoryToDelete(null)} textColor={colors.textMuted}>
-              Отмена
-            </Button>
-            <Button onPress={confirmDeleteCategory} textColor={colors.danger}>
-              Удалить
+            <Button onPress={() => setWhatsNewVisible(false)} textColor={colors.accent}>
+              Понятно
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -264,57 +283,189 @@ export default function Categories() {
   );
 }
 
+type SettingsSectionProps = {
+  children: React.ReactNode;
+  title: string;
+};
+
+function SettingsSection({ children, title }: SettingsSectionProps) {
+  // Небольшая обёртка даёт settings-like groups без превращения экрана в набор карточек.
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionRows}>{children}</View>
+    </View>
+  );
+}
+
+type SettingsRowProps = {
+  description?: string;
+  danger?: boolean;
+  icon: string;
+  onPress?: () => void;
+  right?: () => React.ReactNode;
+  title: string;
+  value?: string;
+};
+
+function SettingsRow({ description, danger, icon, onPress, right, title, value }: SettingsRowProps) {
+  // Унифицированная строка настроек: слева icon, справа toggle/value/chevron.
+  return (
+    <>
+      <List.Item
+        title={title}
+        description={description}
+        onPress={onPress}
+        titleStyle={[styles.rowTitle, danger && styles.dangerText]}
+        descriptionStyle={styles.rowDescription}
+        style={styles.row}
+        left={(props) => (
+          <List.Icon {...props} icon={icon} color={danger ? colors.danger : colors.textMuted} />
+        )}
+        right={() => {
+          if (right) {
+            return <View style={styles.rowRight}>{right()}</View>;
+          }
+
+          if (value) {
+            return (
+              <View style={styles.rowValueBlock}>
+                <Text numberOfLines={1} style={styles.rowValue}>
+                  {value}
+                </Text>
+                {onPress && <List.Icon icon="chevron-right" color={colors.textMuted} />}
+              </View>
+            );
+          }
+
+          return onPress ? <List.Icon icon="chevron-right" color={colors.textMuted} /> : null;
+        }}
+      />
+      <Divider style={styles.divider} />
+    </>
+  );
+}
+
+type RadioDialogProps = {
+  onChange: (value: string) => void;
+  onDismiss: () => void;
+  options: Array<{ key: string; label: string }>;
+  title: string;
+  value: string;
+  visible: boolean;
+};
+
+function RadioDialog({ onChange, onDismiss, options, title, value, visible }: RadioDialogProps) {
+  return (
+    <Dialog visible={visible} onDismiss={onDismiss}>
+      <Dialog.Title>{title}</Dialog.Title>
+      <Dialog.Content>
+        <RadioButton.Group value={value} onValueChange={onChange}>
+          {options.map((option) => (
+            <RadioButton.Item
+              key={option.key}
+              label={option.label}
+              value={option.key}
+              labelStyle={styles.radioLabel}
+              color={colors.accent}
+            />
+          ))}
+        </RadioButton.Group>
+      </Dialog.Content>
+      <Dialog.Actions>
+        <Button onPress={onDismiss} textColor={colors.textMuted}>
+          Закрыть
+        </Button>
+      </Dialog.Actions>
+    </Dialog>
+  );
+}
+
 const styles = StyleSheet.create({
   appbar: {
     backgroundColor: colors.background,
   },
-  categoryDescription: {
+  brandBlock: {
+    paddingBottom: 18,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
+  brandMeta: {
     color: colors.textMuted,
-  },
-  categoryActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  categoryRow: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 62,
-  },
-  categoryTitle: {
-    color: colors.text,
+    fontSize: 12,
     fontWeight: '700',
+    marginTop: 2,
+    opacity: 0.65,
+  },
+  brandTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
   },
   container: {
     backgroundColor: colors.background,
     flex: 1,
   },
+  content: {
+    paddingBottom: 32,
+  },
+  dangerText: {
+    color: colors.danger,
+  },
   dialogText: {
     color: colors.text,
-    lineHeight: 20,
+    lineHeight: 21,
   },
-  emptyList: {
-    flexGrow: 1,
+  divider: {
+    backgroundColor: colors.border,
+    marginLeft: 64,
+  },
+  radioLabel: {
+    color: colors.text,
+  },
+  row: {
+    backgroundColor: colors.surface,
+    minHeight: 58,
+    paddingRight: 8,
+  },
+  rowDescription: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  rowRight: {
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyText: {
+  rowTitle: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  rowValue: {
     color: colors.textMuted,
-    textAlign: 'center',
+    fontSize: 13,
+    maxWidth: 130,
   },
-  fab: {
-    backgroundColor: colors.accent,
-    bottom: 18,
-    position: 'absolute',
-    right: 18,
+  rowValueBlock: {
+    alignItems: 'center',
+    flexDirection: 'row',
   },
-  listContent: {
-    paddingBottom: 110,
+  section: {
+    marginBottom: 18,
+  },
+  sectionRows: {
+    backgroundColor: colors.surface,
+    borderBottomColor: colors.border,
+    borderTopColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   sectionTitle: {
-    color: colors.text,
-    fontSize: 16,
+    color: colors.textMuted,
+    fontSize: 12,
     fontWeight: '800',
+    letterSpacing: 0,
+    paddingBottom: 7,
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 6,
+    textTransform: 'uppercase',
   },
 });

@@ -55,6 +55,11 @@ const setupDatabase = async (): Promise<void> => {
 
     CREATE INDEX IF NOT EXISTS idx_wish_items_created_at
       ON wish_items (createdAt);
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
   `);
 
   await migrateWishItemsSchema();

@@ -16,13 +16,14 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { initDatabase } from '../db/schema';
 import { useCategoryStore } from '../state/stores/categoryStore';
+import { useSettingsStore } from '../state/stores/settingsStore';
 import { useWishStore } from '../state/stores/wishStore';
 import { Category, Priority, WishItem } from '../types/models';
+import { AppSortKey } from '../types/settings_v1.4.0';
+import { SORT_OPTIONS } from '../constants/appSettings_v1.4.0';
 import { formatDate, formatPrice, priorityLabels, statusLabels } from '../utils/formatters_v1.0.0';
 import { normalizeProductUrl } from '../utils/url_v1.1.0';
 import { colors } from '../theme/theme_v1.0.0';
-
-type SortKey = 'priceAsc' | 'priceDesc' | 'priority' | 'dateAsc' | 'dateDesc' | 'nameAsc';
 
 const priorityColors: Record<Priority, string> = {
   high: colors.danger,
@@ -30,25 +31,17 @@ const priorityColors: Record<Priority, string> = {
   low: colors.success,
 };
 
-const sortOptions: Array<{ key: SortKey; label: string }> = [
-  { key: 'priceAsc', label: 'Цена ↑' },
-  { key: 'priceDesc', label: 'Цена ↓' },
-  { key: 'priority', label: 'Приоритет' },
-  { key: 'dateDesc', label: 'Дата ↓' },
-  { key: 'dateAsc', label: 'Дата ↑' },
-  { key: 'nameAsc', label: 'Название А-Я' },
-];
-
 // Version берём из Expo config, чтобы UI не расходился с app.json при следующих релизах.
-const appVersion = Constants.expoConfig?.version ?? '1.3.0';
+const appVersion = Constants.expoConfig?.version ?? '1.4.0';
 
 export default function Index() {
   const router = useRouter();
   const { items, totalWantPrice, refreshItems, toggleItemStatus, isLoading } = useWishStore();
   const { categories, loadCategories } = useCategoryStore();
+  const { settings, loadSettings } = useSettingsStore();
   const [search, setSearch] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>('dateDesc');
+  const [sortKey, setSortKey] = useState<AppSortKey>('dateDesc');
   const [isSortMenuVisible, setSortMenuVisible] = useState(false);
   const [showBought, setShowBought] = useState(false);
   const [isReady, setReady] = useState(false);
@@ -60,13 +53,13 @@ export default function Index() {
     try {
       setBootstrapError(null);
       await initDatabase();
-      await Promise.all([loadCategories(), refreshItems()]);
+      await Promise.all([loadCategories(), refreshItems(), loadSettings()]);
       setReady(true);
     } catch (error) {
       console.error('Error bootstrapping WishList', error);
       setBootstrapError('Не удалось открыть локальную базу данных');
     }
-  }, [loadCategories, refreshItems]);
+  }, [loadCategories, loadSettings, refreshItems]);
 
   useEffect(() => {
     void bootstrapApp();
@@ -75,10 +68,17 @@ export default function Index() {
   useFocusEffect(
     useCallback(() => {
       if (isReady) {
-        void Promise.all([loadCategories(), refreshItems()]);
+        void Promise.all([loadCategories(), refreshItems(), loadSettings()]);
       }
-    }, [isReady, loadCategories, refreshItems]),
+    }, [isReady, loadCategories, loadSettings, refreshItems]),
   );
+
+  useEffect(() => {
+    if (isReady) {
+      setShowBought(settings.showBoughtByDefault);
+      setSortKey(settings.defaultSortKey);
+    }
+  }, [isReady, settings.defaultSortKey, settings.showBoughtByDefault]);
 
   const categoryById = useMemo(() => {
     return categories.reduce<Record<string, Category>>((accumulator, category) => {
@@ -120,7 +120,7 @@ export default function Index() {
     });
   }, [categoryById, items, search, selectedCategoryId, showBought, sortKey]);
 
-  const selectedSortLabel = sortOptions.find((option) => option.key === sortKey)?.label ?? 'Сортировка';
+  const selectedSortLabel = SORT_OPTIONS.find((option) => option.key === sortKey)?.label ?? 'Сортировка';
 
   const renderCategoryChip = (category: Category | null) => {
     const isSelected = selectedCategoryId === category?.id || (category === null && selectedCategoryId === null);
@@ -144,7 +144,7 @@ export default function Index() {
     const categoryName = categoryById[item.categoryId]?.name ?? 'Без категории';
     const isBought = item.status === 'bought';
     const productUrl = normalizeProductUrl(item.url);
-    const thumbnailUrl = normalizeProductUrl(item.imageUrl);
+    const thumbnailUrl = settings.thumbnailsEnabled ? normalizeProductUrl(item.imageUrl) : null;
     const metaText = `${categoryName} • ${formatPrice(item.price)}`;
     const isDeadlinePast = isPastDeadline(item.deadline);
     const hasNote = Boolean(item.note?.trim());
@@ -157,6 +157,7 @@ export default function Index() {
         onPress={() => router.push({ pathname: '/add-edit', params: { id: item.id } })}
         style={({ pressed }) => [
           styles.row,
+          settings.listDensity === 'compact' && styles.compactRow,
           pressed && styles.pressedRow,
           isBought && styles.boughtRow,
         ]}
@@ -166,7 +167,7 @@ export default function Index() {
         {thumbnailSource && (
           <Image
             source={thumbnailSource}
-            style={styles.thumbnail}
+            style={[styles.thumbnail, settings.listDensity === 'compact' && styles.compactThumbnail]}
             onError={() => {
               // Если ссылка на картинку битая, скрываем превью и оставляем строку компактной.
               if (thumbnailKey) {
@@ -177,10 +178,20 @@ export default function Index() {
         )}
 
         <View style={styles.itemTextBlock}>
-          <Text numberOfLines={1} style={[styles.itemName, isBought && styles.boughtText]}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.itemName,
+              settings.listDensity === 'compact' && styles.compactItemName,
+              isBought && styles.boughtText,
+            ]}
+          >
             {item.name}
           </Text>
-          <Text numberOfLines={1} style={styles.itemMeta}>
+          <Text
+            numberOfLines={1}
+            style={[styles.itemMeta, settings.listDensity === 'compact' && styles.compactItemMeta]}
+          >
             {metaText}
           </Text>
           {item.deadline && (
@@ -310,7 +321,7 @@ export default function Index() {
               </Button>
             }
           >
-            {sortOptions.map((option) => (
+            {SORT_OPTIONS.map((option) => (
               <Menu.Item
                 key={option.key}
                 title={option.label}
@@ -516,6 +527,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  compactItemMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  compactItemName: {
+    fontSize: 15,
+  },
+  compactRow: {
+    minHeight: 58,
+    paddingVertical: 7,
+  },
+  compactThumbnail: {
+    height: 36,
+    width: 36,
   },
   deadlineText: {
     color: colors.accent,

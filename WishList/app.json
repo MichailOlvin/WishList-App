@@ -2,7 +2,7 @@
   "expo": {
     "name": "WishList",
     "slug": "wishlist",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",

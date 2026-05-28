@@ -8,6 +8,7 @@ import { Appbar, Button, Menu, SegmentedButtons, TextInput } from 'react-native-
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { initDatabase } from '../db/schema';
 import { useCategoryStore } from '../state/stores/categoryStore';
+import { useSettingsStore } from '../state/stores/settingsStore';
 import { useWishStore } from '../state/stores/wishStore';
 import { Category, Priority, WishItem } from '../types/models';
 import { colors } from '../theme/theme_v1.0.0';
@@ -20,6 +21,7 @@ export default function AddEdit() {
   const isEditing = Boolean(id);
   const { items, addItem, updateItem, deleteItem, refreshItems } = useWishStore();
   const { categories, loadCategories } = useCategoryStore();
+  const { settings, loadSettings } = useSettingsStore();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [url, setUrl] = useState('');
@@ -46,12 +48,12 @@ export default function AddEdit() {
   const bootstrapForm = useCallback(async () => {
     try {
       await initDatabase();
-      await Promise.all([loadCategories(), refreshItems()]);
+      await Promise.all([loadCategories(), refreshItems(), loadSettings()]);
     } catch (error) {
       console.error('Error bootstrapping form', error);
       Alert.alert('Ошибка', 'Не удалось загрузить данные формы');
     }
-  }, [loadCategories, refreshItems]);
+  }, [loadCategories, loadSettings, refreshItems]);
 
   const resetForm = useCallback(() => {
     // Hidden tab screens остаются mounted, поэтому add mode должен сам очищать draft state.
@@ -60,14 +62,14 @@ export default function AddEdit() {
     setUrl('');
     setImageUrl('');
     setPriority('medium');
-    setCategoryId(getDefaultCategoryId(categories));
+    setCategoryId(getDefaultCategoryId(categories, settings.defaultCategoryId));
     setDeadline(null);
     setDeadlinePickerDate(getTodayForPicker());
     setNote('');
     setCategoryMenuVisible(false);
     setDatePickerVisible(false);
     setInitializedItemId(null);
-  }, [categories]);
+  }, [categories, settings.defaultCategoryId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -102,9 +104,9 @@ export default function AddEdit() {
     }
 
     if (!isEditing && categories.length > 0 && !categoryId) {
-      setCategoryId(getDefaultCategoryId(categories));
+      setCategoryId(getDefaultCategoryId(categories, settings.defaultCategoryId));
     }
-  }, [categories, categoryId, currentItem, initializedItemId, isEditing]);
+  }, [categories, categoryId, currentItem, initializedItemId, isEditing, settings.defaultCategoryId]);
 
   const handleDeadlineChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (event.type === 'dismissed' || !selectedDate) {
@@ -416,7 +418,13 @@ const normalizeDateForStorage = (date: Date): Date => {
   return normalizedDate;
 };
 
-const getDefaultCategoryId = (categories: Category[]): string => {
+const getDefaultCategoryId = (categories: Category[], savedCategoryId: string | null): string => {
+  const savedCategory = categories.find((category) => category.id === savedCategoryId);
+
+  if (savedCategory) {
+    return savedCategory.id;
+  }
+
   const generalCategory = categories.find((category) => category.name === GENERAL_CATEGORY_NAME);
 
   return generalCategory?.id ?? categories[0]?.id ?? '';

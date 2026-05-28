@@ -11,6 +11,8 @@ interface WishStore {
   addItem: (item: wishService.WishItemInput) => Promise<WishItem>;
   updateItem: (item: WishItem) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
+  clearBoughtItems: () => Promise<void>;
+  clearAllItems: () => Promise<void>;
   toggleItemStatus: (item: WishItem) => Promise<void>;
   loadTotalPrice: () => Promise<void>;
 }
@@ -68,6 +70,26 @@ export const useWishStore = create<WishStore>((set, get) => ({
       await get().refreshItems();
     } catch (error) {
       console.error('Error deleting wish item', error);
+      throw error;
+    }
+  },
+
+  clearBoughtItems: async () => {
+    try {
+      await wishService.deleteBoughtWishItems();
+      await get().refreshItems();
+    } catch (error) {
+      console.error('Error deleting bought wish items', error);
+      throw error;
+    }
+  },
+
+  clearAllItems: async () => {
+    try {
+      await wishService.deleteAllWishItems();
+      await get().refreshItems();
+    } catch (error) {
+      console.error('Error deleting all wish items', error);
       throw error;
     }
   },

@@ -13,6 +13,7 @@ export default function Layout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="add-edit" />
         <Stack.Screen name="categories" />
+        <Stack.Screen name="category-management" />
       </Stack>
     </PaperProvider>
   );

@@ -1,4 +1,4 @@
-# WishList v1.3.0
+# WishList v1.4.0
 
 Мобильное Android-приложение на Expo (React Native) + TypeScript для личного списка будущих покупок.
 
@@ -67,6 +67,15 @@
 - Единый поиск теперь ищет по названию, категории, заметке, URL, цене, приоритету, статусу и deadline
 - Добавлена SQLite migration для поля `imageUrl`, чтобы старые локальные базы обновлялись без сброса данных
 
+## Изменения v1.4.0
+
+- Экран шестерёнки превращён в полноценные настройки с grouped rows
+- Управление категориями вынесено в отдельный экран
+- Добавлено локальное хранение preferences через SQLite `app_settings`
+- Добавлены настройки: показывать купленные по умолчанию, сортировка, категория по умолчанию, миниатюры, компактность списка
+- Добавлены actions для очистки купленных хотелок и удаления всех хотелок
+- Main screen теперь применяет сохранённые настройки списка
+
 ## Roadmap
 
 - Автозаполнение названия из URL: делать только через preview/confirm, чтобы неправильный title с сайта не затирал ручной ввод.
@@ -76,7 +85,7 @@
 - `src/app/` — Expo Router screens: main list, add/edit form, categories
 - `src/db/schema.ts` — SQLite schema bootstrap и seed orchestration
 - `src/db/services/*_v*.ts` — versioned repository/data layer
-- `src/state/stores/` — Zustand stores для items и categories
+- `src/state/stores/` — Zustand stores для items, categories и settings
 - `src/types/models.ts` — domain models `WishItem` и `Category`
 - `src/theme/theme_v1.0.0.ts` — dark theme palette
 - `src/utils/*_v1.0.0.ts` — UUID и formatting helpers
